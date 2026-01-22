@@ -1,0 +1,18 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add a device power curve profile",
+        "description": "Select a power sensor and define standby and wait time.",
+        "data": {
+          "name": "Name",
+          "power_entity": "Power sensor",
+          "standby_w": "Standby power (W)",
+          "wait_time_s": "Wait time below standby (s)",
+          "expected_runtime_s": "Expected runtime cutoff (s)",
+          "price_entity": "Price sensor (optional)"
+        }
+      }
+    }
+  }
+}
