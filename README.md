@@ -128,7 +128,7 @@ Each configured device creates one sensor entity.
 - Expected runtime seconds  
   Hard cutoff for shorter cycles, useful for devices with multiple operating modes
 - Price sensor  
-
+```
 sensor:
   - platform: rest
     name: Tibber prices 15m
@@ -148,7 +148,7 @@ sensor:
       Authorization: "Bearer YOUR_TIBBER_API_TOKEN"
       Content-Type: application/json
       User-Agent: HomeAssistant
-
+```
 
 
 
