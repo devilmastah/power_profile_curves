@@ -357,6 +357,9 @@ series:
       
 ```
 
+<img width="389" height="265" alt="image" src="https://github.com/user-attachments/assets/a4114b64-c6c7-474c-93be-9c394d180d18" />
+
+
 
 
 ## If the device is not used
