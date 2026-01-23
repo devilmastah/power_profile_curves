@@ -20,8 +20,13 @@ from .const import (
     BUCKET_MINUTES,
 )
 from .curve_tracker import CurveTracker
-from .storage import CurveStorage
-from .price_calc import parse_tibber_prices_attributes, compute_start_costs_quarters, best_start, PriceTimeline
+from .storage import CurveStorage, CurveState
+from .price_calc import (
+    parse_tibber_prices_attributes,
+    compute_start_costs_quarters,
+    best_start,
+    PriceTimeline,
+)
 
 
 async def async_setup_entry(
@@ -49,6 +54,9 @@ async def async_setup_entry(
         price_entity=price_entity,
         storage=storage,
     )
+
+    hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN][entry.entry_id] = sensor
 
     async_add_entities([sensor], update_before_add=True)
     await sensor.async_start_listening()
@@ -94,7 +102,6 @@ class PowerCurveSensor(SensorEntity):
 
         @callback
         def _on_state_updated() -> None:
-            # curve updated, recompute costs then update state
             self.hass.async_create_task(self._async_recompute_costs())
             self.async_write_ha_state()
 
@@ -117,7 +124,6 @@ class PowerCurveSensor(SensorEntity):
         loaded = await self._storage.load()
         await self._tracker.load_state(loaded)
 
-        # Load initial price timeline, if configured
         await self._async_refresh_price_timeline_from_state()
         await self._async_recompute_costs()
 
@@ -128,6 +134,10 @@ class PowerCurveSensor(SensorEntity):
         if self._unsub_price is not None:
             self._unsub_price()
             self._unsub_price = None
+
+        domain_data = self.hass.data.get(DOMAIN, {})
+        if domain_data.get(self.entry.entry_id) is self:
+            domain_data.pop(self.entry.entry_id, None)
 
     async def async_start_listening(self) -> None:
         if self._unsub_power is not None:
@@ -150,6 +160,7 @@ class PowerCurveSensor(SensorEntity):
         )
 
         if self._price_entity:
+
             async def _handle_price(event) -> None:
                 await self._async_refresh_price_timeline_from_event(event)
                 await self._async_recompute_costs()
@@ -160,6 +171,19 @@ class PowerCurveSensor(SensorEntity):
                 [self._price_entity],
                 _handle_price,
             )
+
+    async def async_reset_curve_state(self) -> None:
+        await self._tracker.load_state(CurveState.empty())
+
+        self._tracker.run.in_run = False
+        self._tracker.run.run_start_ts = None
+        self._tracker.run.below_standby_since = None
+        self._tracker.run.current_run_buckets_kwh = []
+        self._tracker.last_ts = None
+        self._tracker.last_power_w = None
+
+        await self._async_recompute_costs()
+        self.async_write_ha_state()
 
     async def _async_refresh_price_timeline_from_state(self) -> None:
         if not self._price_entity:
@@ -242,15 +266,11 @@ class PowerCurveSensor(SensorEntity):
         return {
             "version": 2,
             "interval_minutes": BUCKET_MINUTES,
-
             "power_entity": self._power_entity,
             "standby_w": self._standby_w,
             "wait_time_s": self._wait_time_s,
             "expected_runtime_s": self._expected_runtime_s,
-
             "runs": state.runs,
-
-            # Curve
             "mean_kwh_per_interval": mean_raw,
             "mean_kwh_per_interval_4dp": mean_4dp,
             "last_run_kwh_per_interval": last_raw,
@@ -259,20 +279,14 @@ class PowerCurveSensor(SensorEntity):
             "last_run_total_kwh": round(state.last_run_total_kwh, 4),
             "last_run_duration_minutes": state.last_run_duration_minutes,
             "last_updated": state.last_updated_iso,
-
-            # Prices and computed start costs
             "price_entity": self._price_entity,
             "price_resolution_minutes": price_res,
-
             "start_cost_today": self._start_cost_today,
             "start_cost_tomorrow": self._start_cost_tomorrow,
-
             "start_cost_today_4dp": round_costs(self._start_cost_today, 4),
             "start_cost_tomorrow_4dp": round_costs(self._start_cost_tomorrow, 4),
-
             "best_start_today_quarter_index": best_today_i,
             "best_start_today_cost": None if best_today_cost is None else round(best_today_cost, 4),
-
             "best_start_tomorrow_quarter_index": best_tomorrow_i,
             "best_start_tomorrow_cost": None if best_tomorrow_cost is None else round(best_tomorrow_cost, 4),
         }
